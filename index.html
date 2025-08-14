@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Plant Watering Reminder</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #111a2c;
+      --txt: #eaf2ff;
+      --muted: #9bb0d1;
+      --accent: #7ee787;
+      --danger: #f85149;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--txt);
+      font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial
+    }
+
+    .wrap {
+      max-width: 720px;
+      margin: 48px auto;
+      padding: 0 16px
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid #1f2a44;
+      border-radius: 16px;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, .35);
+      padding: 22px
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 26px;
+      letter-spacing: .2px
+    }
+
+    p {
+      margin: 8px 0;
+      color: var(--muted);
+      line-height: 1.5
+    }
+
+    label {
+      display: block;
+      margin: 12px 0 6px
+    }
+
+    input[type="time"] {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #213055;
+      background: #0c1426;
+      color: var(--txt);
+      font-size: 16px
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 12px
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 14px;
+      cursor: pointer;
+      background: #17213a;
+      color: #cfe5ff;
+      font-weight: 600;
+      transition: .15s transform, .15s filter;
+      flex: 1 1 180px
+    }
+
+    button:hover {
+      transform: translateY(-1px)
+    }
+
+    button.primary {
+      background: linear-gradient(135deg, #2b6ef5, #27c29d);
+      color: #fff
+    }
+
+    button.warn {
+      background: linear-gradient(135deg, #a52, #d33)
+    }
+
+    .status {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-top: 14px
+    }
+
+    .pill {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #0c1426;
+      border: 1px solid #1e2a48;
+      color: #9bb0d1
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 8px;
+      margin-top: 6px
+    }
+
+    .kv div {
+      padding: 8px 10px;
+      border: 1px solid #1f2a44;
+      border-radius: 10px;
+      background: #0d1730
+    }
+
+    .kv .k {
+      color: #9bb0d1
+    }
+
+    .note {
+      margin-top: 14px;
+      font-size: 13px;
+      color: #9bb0d1
+    }
+
+    .ok {
+      color: #7ee787
+    }
+
+    .bad {
+      color: var(--danger)
+    }
+
+    footer {
+      margin-top: 16px;
+      font-size: 12px;
+      color: #7a8fb3
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Plant Watering Reminder</h1>
+      <p>Set a daily time. Keep this tab open to ensure on-time alarms. You’ll get a notification and a sound alert.</p>
+
+      <label for="time">Daily reminder time</label>
+      <input id="time" type="time" required />
+
+      <div class="row">
+        <button id="save" class="primary">Save Time & Schedule</button>
+        <button id="notify">Enable Notifications</button>
+        <button id="sound">Enable Alarm Sound</button>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <button id="test">Test Alarm Now</button>
+        <button id="stop" class="warn">Stop Alarm</button>
+      </div>
+
+      <div class="status">
+        <span class="pill">Status</span>
+        <span id="statusText" class="pill">Choose a time and click “Save Time & Schedule”.</span>
+      </div>
+
+      <div class="kv">
+        <div class="k">Next reminder</div>
+        <div id="nextAt">—</div>
+        <div class="k">Time remaining</div>
+        <div id="countdown">—</div>
+        <div class="k">Notifications</div>
+        <div id="notifState" class="pill">Not requested</div>
+        <div class="k">Sound</div>
+        <div id="soundState" class="pill">Disabled</div>
+      </div>
+
+      <p class="note">
+        Tip: Use over <strong>https://</strong> or <strong>http://localhost</strong> so notifications can be enabled. On
+        phones, also turn off Silent/Do-Not-Disturb at your reminder time.
+      </p>
+      <footer>All data stays in your browser (localStorage only).</footer>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+    (() => {
+      // ----- Elements
+      const $ = (id) => document.getElementById(id);
+      const timeEl = $('time');
+      const saveBtn = $('save');
+      const notifyBtn = $('notify');
+      const soundBtn = $('sound');
+      const testBtn = $('test');
+      const stopBtn = $('stop');
+      const statusText = $('statusText');
+      const nextAt = $('nextAt');
+      const countdown = $('countdown');
+      const notifState = $('notifState');
+      const soundState = $('soundState');
+
+      // ----- State keys
+      const LS_KEYS = {
+        TIME: 'pw_alarm_time',        // 'HH:MM'
+        NEXT: 'pw_next_iso',          // ISO string
+        SOUND: 'pw_sound_enabled',    // '1' | '0'
+        NOTIF: 'pw_notif_permission'  // 'default' | 'granted' | 'denied' | 'unsupported'
+      };
+
+      let alarmTimeoutId = null;
+      let countdownId = null;
+      let stopAutoId = null;
+
+      // ----- Audio (unlocked by user gesture)
+      let audioCtx = null;
+      let beepInterval = null;
+
+      // Helpers
+      const isSecure = () =>
+        location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
+      function supportsNotifications() {
+        return typeof window !== 'undefined' && 'Notification' in window;
+      }
+
+      function setNotifUIByPerm(perm) {
+        if (perm === 'granted') {
+          notifState.textContent = 'Enabled';
+          notifState.className = 'pill ok';
+          localStorage.setItem(LS_KEYS.NOTIF, 'granted');
+        } else if (perm === 'denied') {
+          notifState.textContent = 'Blocked (browser)';
+          notifState.className = 'pill bad';
+          localStorage.setItem(LS_KEYS.NOTIF, 'denied');
+        } else if (perm === 'default') {
+          notifState.textContent = isSecure() ? 'Not requested' : 'Needs HTTPS/localhost';
+          notifState.className = 'pill ' + (isSecure() ? '' : 'bad');
+          localStorage.setItem(LS_KEYS.NOTIF, 'default');
+        } else {
+          notifState.textContent = 'Not supported';
+          notifState.className = 'pill bad';
+          localStorage.setItem(LS_KEYS.NOTIF, 'unsupported');
+        }
+      }
+
+      function updateNotifUI() {
+        if (!supportsNotifications()) { setNotifUIByPerm('unsupported'); return; }
+        setNotifUIByPerm(Notification.permission);
+      }
+
+      // Works with both Promise and callback styles of Notification.requestPermission
+      function requestNotificationPermission() {
+        if (!supportsNotifications()) return Promise.resolve('unsupported');
+        if (!isSecure()) return Promise.resolve('insecure');
+        try {
+          return new Promise((resolve) => {
+            let returned = false;
+            const maybePromise = Notification.requestPermission((perm) => { // old callback style
+              if (!returned) { returned = true; resolve(perm); }
+            });
+            if (maybePromise && typeof maybePromise.then === 'function') {
+              maybePromise.then((perm) => { if (!returned) resolve(perm); });
+            }
+          });
+        } catch {
+          return Promise.resolve('error');
+        }
+      }
+
+      async function ensureAudio() {
+        if (!audioCtx) {
+          const Ctor = window.AudioContext || window.webkitAudioContext;
+          if (!Ctor) throw new Error('Web Audio not supported');
+          audioCtx = new Ctor();
+        }
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume().catch(() => { });
+        }
+      }
+
+      async function enableSound() {
+        try {
+          await ensureAudio();
+          // Unlock by starting & stopping a silent oscillator briefly (inside user gesture)
+          const g = audioCtx.createGain();
+          g.gain.value = 0.0001;
+          g.connect(audioCtx.destination);
+          const o = audioCtx.createOscillator();
+          o.frequency.value = 440;
+          o.connect(g);
+          o.start();
+          setTimeout(() => o.stop(), 30);
+
+          localStorage.setItem(LS_KEYS.SOUND, '1');
+          soundState.textContent = 'Enabled';
+          soundState.className = 'pill ok';
+          setStatus('Alarm sound is enabled.');
+        } catch (e) {
+          soundState.textContent = 'Error enabling sound';
+          soundState.className = 'pill bad';
+          setStatus('Could not enable sound: ' + e.message, true);
+        }
+      }
+
+      async function startAlarmSound() {
+        if (localStorage.getItem(LS_KEYS.SOUND) !== '1') return;
+        await ensureAudio();
+        stopAlarmSound(); // clean start
+
+        const g = audioCtx.createGain();
+        g.connect(audioCtx.destination);
+
+        function singleBeep() {
+          if (!audioCtx) return;
+          const o = audioCtx.createOscillator();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(880, audioCtx.currentTime);
+          o.connect(g);
+          g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.3, audioCtx.currentTime + 0.05);
+          o.start();
+          setTimeout(() => {
+            g.gain.setValueAtTime(0.0001, audioCtx.currentTime + 0.5);
+            o.stop(audioCtx.currentTime + 0.5);
+          }, 480);
+        }
+
+        singleBeep();
+        beepInterval = setInterval(singleBeep, 800);
+      }
+
+      function stopAlarmSound() {
+        if (beepInterval) {
+          clearInterval(beepInterval);
+          beepInterval = null;
+        }
+      }
+
+      function vibrate() {
+        try { if (navigator.vibrate) navigator.vibrate([400, 200, 400, 400, 200, 400]); } catch { }
+      }
+
+      function showNotification(title, body) {
+        try {
+          if (!supportsNotifications()) return false;
+          if (Notification.permission === 'granted') {
+            const n = new Notification(title, {
+              body,
+              tag: 'plant-water-reminder',
+              renotify: true,
+              requireInteraction: true
+            });
+            n.onclick = () => { try { window.focus(); } catch { } };
+            return true;
+          }
+        } catch { }
+        return false;
+      }
+
+      function parseTime(t) {
+        if (!t || !/^\d{2}:\d{2}$/.test(t)) return null;
+        const [h, m] = t.split(':').map(Number);
+        if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+        return { h, m };
+      }
+
+      function nextOccurrence(timeStr) {
+        const tm = parseTime(timeStr);
+        if (!tm) return null;
+        const now = new Date();
+        const target = new Date(now);
+        target.setHours(tm.h, tm.m, 0, 0);
+        if (target <= now) target.setDate(target.getDate() + 1);
+        return target;
+      }
+
+      function formatDT(d) {
+        if (!(d instanceof Date) || isNaN(d.getTime())) return '—';
+        try {
+          return d.toLocaleString(undefined, {
+            weekday: 'short', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+          });
+        } catch { return d.toString(); }
+      }
+
+      function msToHMS(ms) {
+        if (!Number.isFinite(ms) || ms <= 0) return '00:00:00';
+        const s = Math.floor(ms / 1000);
+        const hh = String(Math.floor(s / 3600)).padStart(2, '0');
+        const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+        const ss = String(s % 60).padStart(2, '0');
+        return `${hh}:${mm}:${ss}`;
+      }
+
+      function setStatus(msg, isBad = false) {
+        statusText.textContent = msg;
+        statusText.className = 'pill ' + (isBad ? 'bad' : 'ok');
+      }
+
+      function schedule(dateObj) {
+        if (alarmTimeoutId) { clearTimeout(alarmTimeoutId); alarmTimeoutId = null; }
+        if (countdownId) { clearInterval(countdownId); countdownId = null; }
+
+        if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+          nextAt.textContent = '—';
+          countdown.textContent = '—';
+          setStatus('No schedule set.', true);
+          return;
+        }
+
+        const delay = dateObj.getTime() - Date.now();
+        if (delay <= 0) {
+          setStatus('Chosen time is in the past. Scheduling for tomorrow.', true);
+          const nx = nextOccurrence(timeEl.value);
+          return schedule(nx);
+        }
+
+        localStorage.setItem(LS_KEYS.NEXT, dateObj.toISOString());
+        nextAt.textContent = formatDT(dateObj);
+        setStatus('Reminder scheduled.');
+
+        alarmTimeoutId = setTimeout(async () => {
+          triggerAlarm('It\'s time to water your plants!');
+          const next = nextOccurrence(timeEl.value);
+          schedule(next);
+        }, delay);
+
+        countdownId = setInterval(() => {
+          const iso = localStorage.getItem(LS_KEYS.NEXT);
+          const ms = iso ? (new Date(iso).getTime() - Date.now()) : NaN;
+          countdown.textContent = msToHMS(ms);
+        }, 250);
+      }
+
+      async function triggerAlarm(message, isTest = false) {
+        const shown = showNotification('Plant Watering Reminder', message);
+        await startAlarmSound();
+        vibrate();
+
+        if (stopAutoId) clearTimeout(stopAutoId);
+        stopAutoId = setTimeout(() => { stopAlarmSound(); stopAutoId = null; }, 60000);
+
+        setStatus(isTest ? 'Test alarm fired.' : (shown ? 'Reminder fired!' : 'Reminder fired (no notification permission).'), !shown && Notification.permission !== 'granted');
+      }
+
+      // ----- Events
+      saveBtn.addEventListener('click', async () => {
+        const t = timeEl.value;
+        const parsed = parseTime(t);
+        if (!parsed) return setStatus('Please enter a valid time (HH:MM).', true);
+
+        // Ask for notification permission during this user gesture if still default
+        if (supportsNotifications() && isSecure() && Notification.permission === 'default') {
+          const perm = await requestNotificationPermission();
+          if (perm === 'insecure') setStatus('Use https:// or localhost to enable notifications.', true);
+          updateNotifUI();
+        }
+
+        localStorage.setItem(LS_KEYS.TIME, t);
+        schedule(nextOccurrence(t));
+      });
+
+      notifyBtn.addEventListener('click', async () => {
+        if (!supportsNotifications()) {
+          setNotifUIByPerm('unsupported');
+          return setStatus('Notifications not supported by this browser.', true);
+        }
+        if (!isSecure()) {
+          updateNotifUI();
+          return setStatus('Use https:// or localhost to enable notifications.', true);
+        }
+        const perm = await requestNotificationPermission();
+        updateNotifUI();
+        if (perm === 'granted') setStatus('Notifications enabled.');
+        else if (perm === 'denied') setStatus('Notifications are blocked in the browser.', true);
+        else if (perm === 'default') setStatus('Notifications are not enabled.', true);
+      });
+
+      soundBtn.addEventListener('click', async () => {
+        await enableSound();
+      });
+
+      testBtn.addEventListener('click', async () => {
+        // If still default and secure, ask now (user gesture)
+        if (supportsNotifications() && isSecure() && Notification.permission === 'default') {
+          const perm = await requestNotificationPermission();
+          updateNotifUI();
+          if (perm !== 'granted') setStatus('Test will run without system notification (permission not granted).', true);
+        }
+        triggerAlarm('This is a test alarm.', true);
+      });
+
+      stopBtn.addEventListener('click', () => {
+        stopAlarmSound();
+        if (stopAutoId) { clearTimeout(stopAutoId); stopAutoId = null; }
+        setStatus('Alarm stopped.');
+      });
+
+      document.addEventListener('visibilitychange', async () => {
+        if (document.visibilityState === 'visible' && audioCtx && audioCtx.state === 'suspended') {
+          try { await audioCtx.resume(); } catch { }
+        }
+      });
+
+      // ----- Bootstrap
+      (function init() {
+        updateNotifUI();
+
+        const savedTime = localStorage.getItem(LS_KEYS.TIME);
+        if (savedTime) timeEl.value = savedTime;
+
+        const soundEnabled = localStorage.getItem(LS_KEYS.SOUND) === '1';
+        if (soundEnabled) { soundState.textContent = 'Enabled'; soundState.className = 'pill ok'; }
+        else { soundState.textContent = 'Disabled'; soundState.className = 'pill'; }
+
+        const storedNextISO = localStorage.getItem(LS_KEYS.NEXT);
+        const storedNext = storedNextISO ? new Date(storedNextISO) : null;
+        const haveTime = !!parseTime(timeEl.value);
+
+        if (haveTime) {
+          if (storedNext && storedNext.getTime() > Date.now()) {
+            schedule(storedNext);
+          } else {
+            schedule(nextOccurrence(timeEl.value));
+          }
+        } else {
+          setStatus('Choose a time and click "Save Time & Schedule".');
+          nextAt.textContent = '—';
+          countdown.textContent = '—';
+        }
+
+        // Catch-up if we reloaded at/after the fire time
+        if (storedNext && storedNext.getTime() <= Date.now() && haveTime) {
+          triggerAlarm('(Catch-up) It\'s time to water your plants!');
+          schedule(nextOccurrence(timeEl.value));
+        }
+      })();
+    })();
+  </script>
+</body>
+
+</html>
